@@ -1,0 +1,374 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Eve 数据库状态</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0b1120;
+      --bg2:       #111827;
+      --card-bg:   rgba(17,24,39,.82);
+      --border:    rgba(148,163,184,.15);
+      --text:      #e2e8f0;
+      --muted:     #64748b;
+      --accent1:   #6366f1;  /* indigo  – core memory */
+      --accent2:   #0ea5e9;  /* sky     – event memory */
+      --accent3:   #10b981;  /* emerald – tasks */
+      --accent4:   #f59e0b;  /* amber   – proactive */
+      --red:       #f87171;
+      --green:     #4ade80;
+      --radius:    16px;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: linear-gradient(135deg, var(--bg), var(--bg2));
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    /* ── TOPBAR ── */
+    .topbar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 28px;
+      background: rgba(11,17,32,.92);
+      border-bottom: 1px solid var(--border);
+      backdrop-filter: blur(12px);
+      position: sticky; top: 0; z-index: 100;
+    }
+    .topbar h1 { font-size: 17px; font-weight: 700; letter-spacing: .02em; }
+    .topbar-right { display: flex; align-items: center; gap: 14px; }
+    .back-btn {
+      text-decoration: none; color: var(--muted); font-size: 13px;
+      padding: 6px 14px; border: 1px solid var(--border); border-radius: 999px;
+      transition: color .15s, border-color .15s;
+    }
+    .back-btn:hover { color: var(--text); border-color: rgba(148,163,184,.4); }
+    .refresh-btn {
+      font-size: 13px; cursor: pointer;
+      padding: 6px 14px; border-radius: 999px;
+      background: var(--accent1); color: #fff; border: 0;
+      font-weight: 600; transition: opacity .15s;
+    }
+    .refresh-btn:hover { opacity: .85; }
+    .last-updated { font-size: 12px; color: var(--muted); }
+
+    /* ── NAV TABS ── */
+    .nav-tabs {
+      display: flex; gap: 4px; padding: 18px 28px 0;
+      border-bottom: 1px solid var(--border);
+      overflow-x: auto;
+    }
+    .tab-btn {
+      padding: 9px 20px; border-radius: var(--radius) var(--radius) 0 0;
+      border: 1px solid transparent; border-bottom: none;
+      background: transparent; color: var(--muted); font-size: 14px;
+      font-weight: 600; cursor: pointer; white-space: nowrap;
+      transition: color .15s, background .15s;
+    }
+    .tab-btn:hover { color: var(--text); }
+    .tab-btn.active {
+      background: var(--card-bg); color: var(--text);
+      border-color: var(--border);
+    }
+    .tab-btn .dot {
+      display: inline-block; width: 8px; height: 8px;
+      border-radius: 50%; margin-right: 6px; vertical-align: middle;
+    }
+
+    /* ── CONTENT ── */
+    .content { padding: 24px 28px 60px; }
+    .pane { display: none; }
+    .pane.active { display: block; }
+
+    /* ── SECTION TITLE ── */
+    .section-title {
+      font-size: 13px; font-weight: 700; letter-spacing: .08em;
+      color: var(--muted); text-transform: uppercase; margin-bottom: 14px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .section-title::after {
+      content: ''; flex: 1; height: 1px; background: var(--border);
+    }
+
+    /* ── CARD ── */
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px 22px;
+      box-shadow: 0 8px 32px rgba(0,0,0,.28);
+    }
+
+    /* ── STAT ROW ── */
+    .stat-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 12px; margin-bottom: 24px;
+    }
+    .stat-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 18px 20px;
+    }
+    .stat-label { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+    .stat-value { font-size: 28px; font-weight: 800; line-height: 1; }
+
+    /* ── TABLE ── */
+    .tbl-wrap { overflow-x: auto; border-radius: var(--radius); border: 1px solid var(--border); }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    thead th {
+      padding: 10px 14px; text-align: left;
+      background: rgba(15,23,42,.6); color: var(--muted); font-weight: 600;
+      font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
+      white-space: nowrap;
+    }
+    tbody tr { border-top: 1px solid var(--border); transition: background .1s; }
+    tbody tr:hover { background: rgba(148,163,184,.05); }
+    td { padding: 10px 14px; vertical-align: top; }
+    td.mono { font-family: monospace; font-size: 12px; color: var(--muted); }
+    td.content-cell { max-width: 360px; word-break: break-word; line-height: 1.5; }
+
+    /* ── PILLS ── */
+    .pill {
+      display: inline-block; padding: 3px 10px; border-radius: 999px;
+      font-size: 11px; font-weight: 700; white-space: nowrap;
+    }
+    .pill-blue    { background: rgba(99,102,241,.2); color: #a5b4fc; }
+    .pill-green   { background: rgba(16,185,129,.2); color: #6ee7b7; }
+    .pill-red     { background: rgba(239,68,68,.2);  color: #fca5a5; }
+    .pill-amber   { background: rgba(245,158,11,.2); color: #fcd34d; }
+    .pill-sky     { background: rgba(14,165,233,.2); color: #7dd3fc; }
+    .pill-purple  { background: rgba(168,85,247,.2); color: #d8b4fe; }
+    .pill-slate   { background: rgba(100,116,139,.2); color: #94a3b8; }
+    .pill-rose    { background: rgba(244,63,94,.2);  color: #fda4af; }
+
+    /* ── PROGRESS BAR ── */
+    .bar-wrap { display: flex; align-items: center; gap: 8px; }
+    .bar { flex: 1; height: 6px; background: rgba(148,163,184,.12); border-radius: 999px; overflow: hidden; }
+    .bar-fill { height: 100%; border-radius: 999px; transition: width .3s; }
+    .bar-label { font-size: 11px; color: var(--muted); min-width: 38px; text-align: right; }
+
+    /* ── GRID 2-COL ── */
+    .g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media (max-width: 760px) { .g2 { grid-template-columns: 1fr; } }
+
+    /* ── MESSAGE BUBBLES ── */
+    .msg-list { display: flex; flex-direction: column; gap: 10px; }
+    .msg-bubble {
+      max-width: 72%; padding: 10px 14px;
+      border-radius: 14px; font-size: 13px; line-height: 1.55;
+    }
+    .msg-bubble.user {
+      align-self: flex-start;
+      background: rgba(14,165,233,.12); border: 1px solid rgba(14,165,233,.2);
+    }
+    .msg-bubble.assistant {
+      align-self: flex-end;
+      background: rgba(99,102,241,.12); border: 1px solid rgba(99,102,241,.2);
+    }
+    .msg-meta { font-size: 10px; color: var(--muted); margin-top: 4px; }
+
+    /* ── DETAIL EXPANDER ── */
+    details > summary { cursor: pointer; list-style: none; }
+    details > summary::after { content: ' ▶'; font-size: 10px; opacity: .5; }
+    details[open] > summary::after { content: ' ▼'; }
+
+    /* ── PRIORITY DOTS ── */
+    .pri { display: inline-flex; gap: 2px; }
+    .pri-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--border);
+    }
+    .pri-dot.on { background: var(--accent1); }
+
+    /* ── EMPTY STATE ── */
+    .empty { text-align: center; padding: 48px 0; color: var(--muted); font-size: 14px; }
+
+    /* ── LOADER ── */
+    #loader {
+      position: fixed; inset: 0; background: rgba(11,17,32,.88);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 999; font-size: 15px; letter-spacing: .05em; color: var(--muted);
+    }
+    #loader.hidden { display: none; }
+
+    /* ── FILTER BAR ── */
+    .filter-bar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+    .filter-btn {
+      padding: 5px 14px; border-radius: 999px; font-size: 12px; font-weight: 600;
+      border: 1px solid var(--border); background: transparent; color: var(--muted);
+      cursor: pointer; transition: all .15s;
+    }
+    .filter-btn:hover, .filter-btn.active { background: var(--accent1); border-color: var(--accent1); color: #fff; }
+
+    .mt16 { margin-top: 16px; }
+    .mt24 { margin-top: 24px; }
+
+    /* JSON expand */
+    .json-cell { font-family: monospace; font-size: 11px; color: var(--muted); max-width: 260px; word-break: break-all; }
+  </style>
+</head>
+<body>
+
+<div id="loader">⌛ 加载数据中…</div>
+
+<!-- Topbar -->
+<div class="topbar">
+  <h1>🧠 Eve 数据库状态</h1>
+  <div class="topbar-right">
+    <span class="last-updated" id="last-updated">—</span>
+    <button class="refresh-btn" onclick="loadData()">刷新</button>
+    <a class="back-btn" href="/">← 返回 Dashboard</a>
+  </div>
+</div>
+
+<!-- Tabs -->
+<div class="nav-tabs">
+  <button class="tab-btn active" onclick="switchTab('messages')" id="tab-messages">
+    <span class="dot" style="background:#0ea5e9"></span>消息记录
+  </button>
+  <button class="tab-btn" onclick="switchTab('core')" id="tab-core">
+    <span class="dot" style="background:#6366f1"></span>核心记忆
+  </button>
+  <button class="tab-btn" onclick="switchTab('events')" id="tab-events">
+    <span class="dot" style="background:#f59e0b"></span>事件记忆
+  </button>
+  <button class="tab-btn" onclick="switchTab('tasks')" id="tab-tasks">
+    <span class="dot" style="background:#10b981"></span>任务会话
+  </button>
+  <button class="tab-btn" onclick="switchTab('proactive')" id="tab-proactive">
+    <span class="dot" style="background:#f59e0b"></span>主动推送
+  </button>
+</div>
+
+<div class="content">
+
+  <!-- ════════════ MESSAGES ════════════ -->
+  <div class="pane active" id="pane-messages">
+    <div class="stat-row" id="msg-stats-row"></div>
+
+    <div class="section-title">最近对话（最新 50 条）</div>
+    <div class="card">
+      <div class="msg-list" id="msg-list"></div>
+    </div>
+  </div>
+
+  <!-- ════════════ CORE MEMORIES ════════════ -->
+  <div class="pane" id="pane-core">
+    <div class="stat-row" id="core-stat-row"></div>
+    <div class="filter-bar" id="core-cat-filter"></div>
+    <div class="tbl-wrap">
+      <table id="core-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Key</th>
+            <th>分类</th>
+            <th>内容</th>
+            <th>优先级</th>
+            <th>置信度</th>
+            <th>提及次数</th>
+            <th>来源</th>
+            <th>更新时间</th>
+          </tr>
+        </thead>
+        <tbody id="core-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ════════════ EVENT MEMORIES ════════════ -->
+  <div class="pane" id="pane-events">
+    <div class="stat-row" id="event-stat-row"></div>
+    <div class="filter-bar" id="event-status-filter"></div>
+
+    <div class="section-title mt16">事件记忆列表</div>
+    <div class="tbl-wrap">
+      <table id="event-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>内容</th>
+            <th>分类</th>
+            <th>状态</th>
+            <th>重要度</th>
+            <th>情绪权重</th>
+            <th>遗忘权重</th>
+            <th>召回次数</th>
+            <th>发生时间</th>
+            <th>有效期至</th>
+          </tr>
+        </thead>
+        <tbody id="event-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ════════════ TASK SESSIONS ════════════ -->
+  <div class="pane" id="pane-tasks">
+    <div class="stat-row" id="task-stat-row"></div>
+
+    <div id="active-task-banner" style="display:none;margin-bottom:20px;" class="card">
+      <div class="section-title">当前活跃任务</div>
+      <div id="active-task-content"></div>
+    </div>
+
+    <div class="section-title">任务历史（最近 30 条）</div>
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>任务名称</th>
+            <th>状态</th>
+            <th>描述</th>
+            <th>最近问题</th>
+            <th>错误信息</th>
+            <th>创建时间</th>
+            <th>完成时间</th>
+          </tr>
+        </thead>
+        <tbody id="task-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ════════════ PROACTIVE ════════════ -->
+  <div class="pane" id="pane-proactive">
+    <div class="section-title">主动推送设置</div>
+    <div class="card mt16" id="proactive-settings-card">
+      <table id="ps-table" style="width:100%;font-size:13px;">
+        <thead><tr><th>Key</th><th>Value</th><th>更新时间</th></tr></thead>
+        <tbody id="ps-tbody"></tbody>
+      </table>
+    </div>
+
+    <div class="section-title mt24">主动推送事件（最近 30 条）</div>
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>事件类型</th>
+            <th>状态</th>
+            <th>动作类型</th>
+            <th>原因</th>
+            <th>关联任务</th>
+            <th>决策摘要</th>
+            <th>创建时间</th>
+          </tr>
+        </thead>
+        <tbody id="proactive-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+</div><!-- /content -->
+
+<script src="{{ url_for('static', filename='memories.js') }}"></script>
+</body>
+</html>

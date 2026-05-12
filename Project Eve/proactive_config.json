@@ -1,0 +1,55 @@
+{
+  "enabled": true,
+  "check_interval_seconds": 60,
+  "quiet_hours": {
+    "start": "01:00",
+    "end": "08:00"
+  },
+  "daily_message_limit": 10,
+  "min_minutes_after_user_message": 30,
+  "min_minutes_between_proactive_messages": 120,
+  "random_delay_minutes": {
+    "morning": [45, 120],
+    "noon": [45, 120],
+    "afternoon": [60, 150],
+    "evening": [30, 90],
+    "night": [90, 180],
+    "other": [60, 150]
+  },
+  "allowed_tasks": {
+    "mcdonalds_surprise_dinner": {
+      "enabled": false,
+      "description": "每周最多一次，根据用户地理位置，通过麦当劳 MCP 选择最近麦当劳餐厅，给用户点一份惊喜晚餐，到店取餐；不要提前透露具体点了什么。",
+      "task_info": {
+        "merchant": "麦当劳",
+        "order_type": "dine_in",
+        "location_strategy": "nearest_to_user",
+        "meal_type": "surprise",
+        "allowed_tools": ["mcdonalds-streamableHTTP"]
+      },
+      "constraints": {
+        "budget_max": 30,
+        "do_not_reveal_item": true
+      },
+      "weekly_limit": 1,
+      "daily_limit": 0,
+      "fixed_check_time": "17:50"
+    },
+    "weather_reminder": {
+      "enabled": true,
+      "description": "使用高德地图 MCP 获取天气，并根据天气随机提醒用户带伞、添衣、防晒或安排出门。",
+      "task_info": {
+        "location_source": "user_profile_or_default",
+        "reminder_style": "short_caring"
+      },
+      "constraints": {
+        "allowed_tools": ["amap-maps-streamableHTTP"],
+        "do_not_send_if_weather_unavailable": true
+      },
+      "daily_limit": 1,
+      "weekly_limit": 7,
+      "trigger_probability": 0.35,
+      "allowed_time_windows": ["07:00-10:30", "16:30-19:30"]
+    }
+  }
+}

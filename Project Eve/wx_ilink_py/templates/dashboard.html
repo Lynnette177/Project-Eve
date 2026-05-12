@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Project Eve Dashboard</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body { font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; background: linear-gradient(135deg,#0f172a,#1e293b); color:#e2e8f0; margin:0; }
+    .wrap { max-width: 980px; margin: 0 auto; padding: 32px 20px 60px; }
+    .hero { display:flex; justify-content:space-between; gap:24px; flex-wrap:wrap; align-items:center; }
+    .card { background: rgba(15,23,42,.72); border:1px solid rgba(148,163,184,.2); border-radius:20px; padding:24px; box-shadow:0 20px 60px rgba(0,0,0,.25); }
+    .grid { display:grid; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); gap:16px; margin-top:20px; }
+    .label { color:#94a3b8; font-size:13px; margin-bottom:8px; }
+    .value { font-size:22px; font-weight:700; word-break:break-word; }
+    .pill { display:inline-block; padding:6px 12px; border-radius:999px; background:#1d4ed8; font-size:14px; }
+    .pill.off { background:#475569; }
+    .muted { color:#94a3b8; }
+    .qr { margin-top:28px; display:grid; grid-template-columns: minmax(240px,320px) 1fr; gap:20px; align-items:start; }
+    .qr img { width:100%; background:#fff; border-radius:16px; padding:14px; }
+    code { background:rgba(148,163,184,.12); padding:2px 6px; border-radius:8px; }
+
+    /* Button row */
+    .btn-group { display:flex; flex-direction:column; gap:10px; margin-top:20px; }
+    .btn {
+      display:inline-flex; align-items:center; justify-content:center;
+      border:0; border-radius:12px; padding:10px 18px;
+      font-size:14px; font-weight:700; cursor:pointer; width:100%;
+      transition: opacity .15s, filter .15s;
+    }
+    .btn:disabled { opacity:.55; cursor:not-allowed; }
+    .btn:hover:not(:disabled) { filter: brightness(1.1); }
+    .btn-green  { background:#22c55e; color:#fff; }
+    .btn-ghost  { background:transparent; border:1px solid rgba(148,163,184,.35); color:#e2e8f0; }
+    .btn-blue   { background:#3b82f6; color:#fff; }
+
+    /* Pipeline visualizer */
+    .pipeline-section { margin-top: 28px; }
+    .pipeline-card { background: rgba(15,23,42,.72); border:1px solid rgba(148,163,184,.2); border-radius:20px; padding:24px; }
+    .pipeline-title { color:#94a3b8; font-size:13px; margin-bottom:4px; }
+    .pipeline-trigger { font-size:13px; color:#cbd5e1; margin-bottom:16px; min-height:18px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    #pipeline-svg { width:100%; overflow:visible; display:block; }
+
+    /* Node styles */
+    .pnode rect { rx:12; ry:12; }
+    .pnode-idle rect { fill:#1e293b; stroke:rgba(148,163,184,.3); stroke-width:1.5; }
+    .pnode-active rect { fill:#1e3a5f; stroke:#3b82f6; stroke-width:2; }
+    .pnode-done rect { fill:#14532d; stroke:#22c55e; stroke-width:1.5; }
+    .pnode-skipped rect { fill:#1e293b; stroke:rgba(148,163,184,.15); stroke-width:1; opacity:.45; }
+    .pnode-error rect { fill:#450a0a; stroke:#ef4444; stroke-width:2; }
+    .pnode text { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; font-size:13px; font-weight:600; fill:#e2e8f0; pointer-events:none; }
+    .pnode-skipped text { fill:#64748b; }
+    .pnode-clickable { cursor:pointer; }
+    .pnode-clickable rect:hover { filter: brightness(1.15); }
+
+    /* Edge */
+    .pedge { fill:none; stroke:rgba(148,163,184,.3); stroke-width:2; marker-end:url(#arrow-idle); }
+    .pedge-active { stroke:#3b82f6; stroke-width:2.5; marker-end:url(#arrow-active); }
+
+    /* Pulse animation */
+    @keyframes pulse-node { 0%,100%{opacity:1} 50%{opacity:.45} }
+    @keyframes dash-flow { to { stroke-dashoffset: -24; } }
+    .pnode-active rect { animation: pulse-node 1.2s ease-in-out infinite; }
+    .pedge-active { stroke-dasharray: 8 6; animation: dash-flow .6s linear infinite; }
+
+    /* Node detail modal */
+    .node-modal-overlay {
+      display:none; position:fixed; inset:0; z-index:1000;
+      background:rgba(0,0,0,.65); backdrop-filter:blur(4px);
+      align-items:center; justify-content:center;
+    }
+    .node-modal-overlay.open { display:flex; }
+    .node-modal {
+      background:#0f172a; border:1px solid rgba(148,163,184,.25); border-radius:20px;
+      width:90vw; max-width:960px; max-height:85vh;
+      display:flex; flex-direction:column; overflow:hidden;
+      box-shadow:0 40px 80px rgba(0,0,0,.6);
+    }
+    .node-modal-header {
+      display:flex; align-items:center; justify-content:space-between;
+      padding:16px 20px; border-bottom:1px solid rgba(148,163,184,.15);
+    }
+    .node-modal-title { font-size:15px; font-weight:700; }
+    .node-modal-close {
+      background:transparent; border:none; color:#94a3b8; font-size:20px;
+      cursor:pointer; line-height:1; padding:0 4px;
+    }
+    .node-modal-close:hover { color:#e2e8f0; }
+    .node-modal-body {
+      display:grid; grid-template-columns:1fr 1fr; gap:0; flex:1; overflow:hidden;
+    }
+    .node-panel {
+      display:flex; flex-direction:column; overflow:hidden;
+      border-right:1px solid rgba(148,163,184,.1);
+    }
+    .node-panel:last-child { border-right:none; }
+    .node-panel-title {
+      padding:10px 16px; font-size:12px; font-weight:700; color:#94a3b8;
+      background:rgba(148,163,184,.05); border-bottom:1px solid rgba(148,163,184,.1);
+      text-transform:uppercase; letter-spacing:.05em;
+    }
+    .node-panel-content {
+      flex:1; overflow-y:auto; padding:14px 16px;
+      font-family:"SF Mono","Fira Code",monospace; font-size:12px; line-height:1.6;
+      color:#cbd5e1; white-space:pre-wrap; word-break:break-word;
+    }
+    .node-panel-empty { color:#475569; font-style:italic; }
+    /* JSON syntax highlight */
+    .json-key { color:#93c5fd; }
+    .json-str { color:#86efac; }
+    .json-num { color:#fbbf24; }
+    .json-bool { color:#f472b6; }
+    .json-null { color:#94a3b8; }
+    /* message role badges */
+    .msg-block { margin-bottom:10px; border-left:3px solid rgba(148,163,184,.2); padding-left:10px; }
+    .msg-role { font-size:10px; font-weight:700; letter-spacing:.05em; margin-bottom:3px; text-transform:uppercase; }
+    .msg-role-system { color:#a78bfa; }
+    .msg-role-user { color:#60a5fa; }
+    .msg-role-assistant { color:#34d399; }
+    .msg-role-tool { color:#fb923c; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+
+    <!-- Hero -->
+    <div class="hero card">
+      <div>
+        <div class="label">系统名称</div>
+        <div class="value">Project Eve Dashboard</div>
+        <p class="muted">Powered By Eve.</p>
+      </div>
+      <div>
+        <span id="login-pill" class="pill {{ '' if state.logged_in else 'off' }}">
+          {{ '已登录' if state.logged_in else '等待登录' }}
+        </span>
+      </div>
+    </div>
+
+    <!-- Stats grid -->
+    <div class="grid">
+      <div class="card"><div class="label">Bot ID</div><div class="value" id="val-account-id">{{ state.account_id or '-' }}</div></div>
+      <div class="card"><div class="label">User ID</div><div class="value" id="val-user-id">{{ state.user_id or '-' }}</div></div>
+      <div class="card"><div class="label">消息接收总数</div><div class="value" id="val-total-received">{{ state.total_received }}</div></div>
+      <div class="card"><div class="label">消息发送总数</div><div class="value" id="val-total-sent">{{ state.total_sent }}</div></div>
+      <div class="card"><div class="label">待处理队列</div><div class="value" id="val-queue-size">{{ state.queue_size }}</div></div>
+      <div class="card"><div class="label">登录方式</div><div class="value" id="val-login-mode">{{ state.login_mode }}</div></div>
+      <div class="card"><div class="label">二维码状态</div><div class="value" id="val-qr-status-grid">{{ state.qr_state.status }}</div></div>
+    </div>
+
+    <!-- QR + status -->
+    <div class="qr">
+
+      <!-- Left: QR card -->
+      <div class="card">
+        <div class="label">扫码登录</div>
+
+        <!-- img shown when qrcode_img_content available -->
+        <img id="qr-img"
+          src="{{ state.qr_state.qrcode_img_content or '' }}"
+          alt="登录二维码"
+          style="{{ '' if state.qr_state.qrcode_img_content else 'display:none' }}"
+          onerror="this.style.display='none'; document.getElementById('qr-fallback').style.display='';">
+
+        <!-- fallback when img fails to load -->
+        <div id="qr-fallback" style="display:none;">
+          <p class="muted">二维码图片无法直接渲染，请使用下面链接打开：</p>
+          <p><a href="{{ state.qr_state.qrcode_url }}" target="_blank" style="color:#93c5fd;word-break:break-all;">{{ state.qr_state.qrcode_url }}</a></p>
+        </div>
+
+        <!-- only URL, no image -->
+        <div id="qr-link" style="{{ '' if (state.qr_state.qrcode_url and not state.qr_state.qrcode_img_content) else 'display:none' }}">
+          <p class="muted">二维码图片未返回，点击下面链接查看二维码：</p>
+          <p><a href="{{ state.qr_state.qrcode_url or '' }}" target="_blank" style="color:#93c5fd;word-break:break-all;">{{ state.qr_state.qrcode_url or '' }}</a></p>
+        </div>
+
+        <!-- no QR at all -->
+        <div id="qr-none" style="{{ '' if not (state.qr_state.qrcode_img_content or state.qr_state.qrcode_url) else 'display:none' }}">
+          <p class="muted">当前未生成二维码；如果存在已保存凭证，会直接复用。</p>
+        </div>
+      </div>
+
+      <!-- Right: status + actions -->
+      <div class="card">
+        <div class="label">运行状态</div>
+        <p>二维码状态：<code id="val-qr-status">{{ state.qr_state.status }}</code></p>
+        <p>上次轮询：<code id="val-last-poll">{{ state.last_poll_at or '-' }}</code></p>
+        <p>接口地址：<code id="val-base-url">{{ state.base_url }}</code></p>
+        <p>凭证文件：<code id="val-creds-path">{{ state.credentials_path }}</code></p>
+        <p>最近错误：<code id="val-last-error" style="{{ 'color:#f87171' if state.last_error else '' }}">{{ state.last_error or '无' }}</code></p>
+
+        <div class="btn-group">
+          <form method="post" action="/login" style="width:100%;">
+            <button type="submit" class="btn btn-green">开始登录</button>
+          </form>
+          <form method="post" action="/logout" style="width:100%;">
+            <button type="submit" class="btn btn-ghost">清除凭证</button>
+          </form>
+          <form method="post" action="/shutdown" style="width:100%;" onsubmit="return confirm('确认关闭 Project Eve 进程？数据库将正常关闭。')">
+            <button type="submit" class="btn" style="background:#ef4444;color:#fff;width:100%;">⏻ 下线Eve</button>
+          </form>
+          <div style="width:100%;">
+            <button id="btn-reload-env" class="btn btn-blue" onclick="reloadEnv()">重载 .env 配置</button>
+            <p id="env-reload-msg" class="muted"></p>
+          </div>
+          <a href="/memories" style="width:100%;text-decoration:none;">
+            <button type="button" class="btn" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);width:100%;">🧠 数据库状态</button>
+          </a>
+        </div>
+
+        <p class="muted" style="margin-top:16px;">页面可直接给运维或业务侧查看登录和运行状态。</p>
+      </div>
+    </div>
+
+    <!-- Pipeline Visualizer -->
+    <div class="pipeline-section">
+      <div class="pipeline-card">
+        <div class="pipeline-title">Pipeline 运行状态</div>
+        <div id="pipeline-trigger" class="pipeline-trigger">等待首次运行...</div>
+        <svg id="pipeline-svg" height="130">
+          <defs>
+            <marker id="arrow-idle" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+              <path d="M0,0 L0,6 L8,3 z" fill="rgba(148,163,184,.4)"/>
+            </marker>
+            <marker id="arrow-active" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+              <path d="M0,0 L0,6 L8,3 z" fill="#3b82f6"/>
+            </marker>
+          </defs>
+          <!-- edges rendered by JS -->
+          <g id="pipeline-edges"></g>
+          <!-- nodes rendered by JS -->
+          <g id="pipeline-nodes"></g>
+        </svg>
+        <div id="pipeline-status-text" style="margin-top:10px;font-size:12px;color:#64748b;"></div>
+      </div>
+    </div>
+
+  </div>
+  <script src="{{ url_for('static', filename='dashboard.js') }}"></script>
+
+  <!-- Node detail modal -->
+  <div id="node-modal-overlay" class="node-modal-overlay" onclick="closeNodeModal(event)">
+    <div class="node-modal">
+      <div class="node-modal-header">
+        <span id="node-modal-title" class="node-modal-title"></span>
+        <button class="node-modal-close" onclick="closeNodeModal()">✕</button>
+      </div>
+      <div class="node-modal-body">
+        <div class="node-panel">
+          <div class="node-panel-title">📥 Input — messages sent to LLM</div>
+          <div id="node-modal-input" class="node-panel-content"></div>
+        </div>
+        <div class="node-panel">
+          <div class="node-panel-title">📤 Output — messages returned</div>
+          <div id="node-modal-output" class="node-panel-content"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
